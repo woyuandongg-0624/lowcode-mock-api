@@ -36,10 +36,8 @@ class handler(BaseHTTPRequestHandler):
             return True, "Valid"
         
         if expected_type == "int":
-            # 必须是 int，且排除 bool
             is_valid = isinstance(val, int) and not isinstance(val, bool)
         elif expected_type == "double":
-            # 必须是 float/double，且排除 bool
             is_valid = isinstance(val, float) and not isinstance(val, bool)
         elif expected_type == "string":
             is_valid = isinstance(val, str)
@@ -77,7 +75,7 @@ class handler(BaseHTTPRequestHandler):
         input_dict = raw_body if isinstance(raw_body, dict) else {}
         validation_errors = {}
 
-        # 2. 定义 type 与必须严格匹配的（入参字段, 类型描述）规范
+        # 2. 定义 type 与必须匹配的（入参字段, 类型描述）规范
         type_spec = {
             "int": ("intIn", "int"),
             "double": ("doubleIn", "double"),
@@ -93,36 +91,30 @@ class handler(BaseHTTPRequestHandler):
             "array_object": ("objectArrayIn", "array")
         }
 
-        # 保留所有入参数据字段（用于排他性检测）
-        all_input_fields = {field for field, _ in type_spec.values()}
-
         # ----------------------------------------------------
-        # 3. 严格校验逻辑
+        # 3. 宽松排他，只针对匹配字段进行强类型校验
         # ----------------------------------------------------
         if param_type in type_spec:
             req_field, exp_type = type_spec[param_type]
 
-            # 校验 A：缺少对应的必填字段
+            # 校验 A：检查 Body 中是否缺少当前 type 对应的入参字段
             if req_field not in input_dict:
                 validation_errors[req_field] = f"Missing required parameter '{req_field}' for type '{param_type}'"
             else:
-                # 校验 B：数据类型是否完全契合 (int vs double)
+                # 校验 B：检查当前 type 对应的字段类型是否正确
                 is_valid, msg = self.check_field_type(input_dict[req_field], exp_type)
                 if not is_valid:
                     validation_errors[req_field] = msg
 
-            # 校验 C：严格排他，不许混入非该 type 的入参字段
-            for field in input_dict.keys():
-                if field != 'type' and field in all_input_fields and field != req_field:
-                    validation_errors[field] = f"Invalid field '{field}' for type '{param_type}'. Expected only '{req_field}'"
+            # 已移除多余字段排他检测（允许同时传入 intIn, stringIn 等其他无关字段）
 
         # ----------------------------------------------------
-        # 4. 校验失败：拦截并返回 code: 400
+        # 4. 校验失败：仅当当前 type 对应的字段缺失或类型错误时返回 400
         # ----------------------------------------------------
         if validation_errors:
             error_response = {
                 "code": 400,
-                "msg": f"Validation Error: Input parameters do not match required spec for type '{param_type}'",
+                "msg": f"Validation Error: Parameter '{type_spec.get(param_type, ('', ''))[0]}' for type '{param_type}' is invalid or missing.",
                 "errors": validation_errors,
                 "receivedInput": raw_body
             }
@@ -130,7 +122,7 @@ class handler(BaseHTTPRequestHandler):
             return
 
         # ----------------------------------------------------
-        # 5. 校验通过：回传对应的强类型出参
+        # 5. 校验通过：顺利返回对应的强类型出参
         # ----------------------------------------------------
         response_data = {
             "code": 0,
