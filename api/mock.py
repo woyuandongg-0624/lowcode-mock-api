@@ -19,6 +19,7 @@ class handler(BaseHTTPRequestHandler):
                 body_bytes = self.rfile.read(content_length)
                 raw_body = json.loads(body_bytes.decode('utf-8'))
                 
+                # 场景：根节点直接是数组/列表 (C# List<T>)
                 if isinstance(raw_body, list):
                     return 'root_array', raw_body
                 
@@ -29,8 +30,8 @@ class handler(BaseHTTPRequestHandler):
 
         return param_type, raw_body
 
-    def validate_type(self, val, expected_type):
-        """入参强类型校验逻辑"""
+    def check_field_type(self, val, expected_type):
+        """校验具体字段的数据类型是否正确"""
         if val is None:
             return True, "Valid"
         
@@ -50,7 +51,7 @@ class handler(BaseHTTPRequestHandler):
             is_valid = True
 
         actual_type = type(val).__name__ if not isinstance(val, bool) else "bool"
-        status_msg = "Valid" if is_valid else f"Type Mismatch: Expected {expected_type}, got {actual_type}"
+        status_msg = "Valid" if is_valid else f"Expected type '{expected_type}', but got '{actual_type}'"
         return is_valid, status_msg
 
     def process_request(self):
@@ -63,42 +64,59 @@ class handler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
 
+        # 1. 根节点是数组的特殊场景
         if param_type == 'root_array':
             echo_list = raw_body if isinstance(raw_body, list) else []
-            self.wfile.write(json.dumps(echo_list).encode('utf-8'))
+            self.wfile.write(json.dumps(echo_list, ensure_ascii=False).encode('utf-8'))
             return
 
         input_dict = raw_body if isinstance(raw_body, dict) else {}
         validation_errors = {}
 
-        # 定义字段与期望类型的映射
-        type_checks = {
-            "stringIn": "string",
-            "numberIn": "number",
-            "booleanIn": "boolean",
-            "dateTimeIn": "datetime",
-            "objectIn": "object",
-            "stringArrayIn": "array",
-            "numberArrayIn": "array",
-            "booleanArrayIn": "array",
-            "dateTimeArrayIn": "array",
-            "objectArrayIn": "array"
+        # 2. 定义 type 与必须且唯一匹配的入参字段规范
+        type_spec = {
+            "string": ("stringIn", "string"),
+            "number": ("numberIn", "number"),
+            "boolean": ("booleanIn", "boolean"),
+            "datetime": ("dateTimeIn", "datetime"),
+            "object": ("objectIn", "object"),
+            "array_string": ("stringArrayIn", "array"),
+            "array_number": ("numberArrayIn", "array"),
+            "array_boolean": ("booleanArrayIn", "array"),
+            "array_datetime": ("dateTimeArrayIn", "array"),
+            "array_object": ("objectArrayIn", "array")
         }
 
-        # 遍历入参，检查是否有类型错误
-        for field, exp_type in type_checks.items():
-            if field in input_dict:
-                is_valid, msg = self.validate_type(input_dict[field], exp_type)
-                if not is_valid:
-                    validation_errors[field] = msg
+        # 所有用于传入具体数据的保留入参字段列表（排除控制字段 type）
+        all_input_fields = {field for field, _ in type_spec.values()}
 
         # ----------------------------------------------------
-        # 1. 拦截逻辑：如果有类型校验错误，返回 code: 400 失败响应
+        # 3. 严格匹配校验逻辑
+        # ----------------------------------------------------
+        if param_type in type_spec:
+            req_field, exp_type = type_spec[param_type]
+
+            # 校验 A：检查 Body 中是否缺少该 type 对应的专有入参字段
+            if req_field not in input_dict:
+                validation_errors[req_field] = f"Missing required parameter '{req_field}' for type '{param_type}'"
+            else:
+                # 校验 B：检查字段数据类型是否符合规范
+                is_valid, msg = self.check_field_type(input_dict[req_field], exp_type)
+                if not is_valid:
+                    validation_errors[req_field] = msg
+
+            # 校验 C：严格排他性校验——不允许传入与其他 type 冲突的非相关字段
+            for field in input_dict.keys():
+                if field != 'type' and field in all_input_fields and field != req_field:
+                    validation_errors[field] = f"Invalid field '{field}' for type '{param_type}'. Expected only '{req_field}'"
+
+        # ----------------------------------------------------
+        # 4. 如果校验失败：返回 code: 400 与详细错误原因
         # ----------------------------------------------------
         if validation_errors:
             error_response = {
                 "code": 400,
-                "msg": "Param Validation Failed",
+                "msg": f"Validation Error: Input parameters do not match required spec for type '{param_type}'",
                 "errors": validation_errors,
                 "receivedInput": raw_body
             }
@@ -106,7 +124,7 @@ class handler(BaseHTTPRequestHandler):
             return
 
         # ----------------------------------------------------
-        # 2. 校验通过：返回 code: 0 正常出参
+        # 5. 校验通过：返回对应强类型的正确出参
         # ----------------------------------------------------
         response_data = {
             "code": 0,
@@ -115,25 +133,25 @@ class handler(BaseHTTPRequestHandler):
         }
 
         if param_type == 'string':
-            response_data["stringVal"] = input_dict.get("stringIn", "Hello LowCode")
+            response_data["stringVal"] = input_dict["stringIn"]
         elif param_type == 'number':
-            response_data["numberVal"] = input_dict.get("numberIn", 2026)
+            response_data["numberVal"] = input_dict["numberIn"]
         elif param_type == 'boolean':
-            response_data["booleanVal"] = input_dict.get("booleanIn", True)
+            response_data["booleanVal"] = input_dict["booleanIn"]
         elif param_type == 'datetime':
-            response_data["dateTimeVal"] = input_dict.get("dateTimeIn", "2026-09-21T18:46:47Z")
+            response_data["dateTimeVal"] = input_dict["dateTimeIn"]
         elif param_type == 'object':
-            response_data["objectVal"] = input_dict.get("objectIn", {"userId": 1001, "userName": "Alice"})
+            response_data["objectVal"] = input_dict["objectIn"]
         elif param_type == 'array_string':
-            response_data["stringArray"] = input_dict.get("stringArrayIn", ["apple", "banana"])
+            response_data["stringArray"] = input_dict["stringArrayIn"]
         elif param_type == 'array_number':
-            response_data["numberArray"] = input_dict.get("numberArrayIn", [10, 20, 30.5])
+            response_data["numberArray"] = input_dict["numberArrayIn"]
         elif param_type == 'array_boolean':
-            response_data["booleanArray"] = input_dict.get("booleanArrayIn", [True, False])
+            response_data["booleanArray"] = input_dict["booleanArrayIn"]
         elif param_type == 'array_datetime':
-            response_data["dateTimeArray"] = input_dict.get("dateTimeArrayIn", ["2026-01-01T08:00:00Z"])
+            response_data["dateTimeArray"] = input_dict["dateTimeArrayIn"]
         elif param_type == 'array_object':
-            response_data["objectArray"] = input_dict.get("objectArrayIn", [{"itemId": 101, "itemName": "Item A"}])
+            response_data["objectArray"] = input_dict["objectArrayIn"]
         elif param_type == 'all_types':
             response_data.update({
                 "stringVal": input_dict.get("stringIn", "Test String"),
