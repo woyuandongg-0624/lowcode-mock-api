@@ -1,27 +1,26 @@
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import urlparse, parse_qs
 import json
+import re
 
 class handler(BaseHTTPRequestHandler):
     def parse_request_data(self):
-        """解析请求中的参数：优先从 POST Body 读取，若没有则从 URL Query 读取"""
+        """解析 Query 参数和 POST Body 数据"""
         param_type = None
         raw_body = None
         
-        # 1. 尝试从 URL Query 参数获取 ?type=xxx
         parsed_path = urlparse(self.path)
         query_params = parse_qs(parsed_path.query)
         if 'type' in query_params:
             param_type = query_params['type'][0]
 
-        # 2. 从 POST Body 读取
         content_length = int(self.headers.get('Content-Length', 0))
         if content_length > 0:
             try:
                 body_bytes = self.rfile.read(content_length)
                 raw_body = json.loads(body_bytes.decode('utf-8'))
                 
-                # 如果整个根入参就是数组/列表
+                # 场景：根节点直接是数组/列表 (List<T>)
                 if isinstance(raw_body, list):
                     return 'root_array', raw_body
                 
@@ -32,10 +31,36 @@ class handler(BaseHTTPRequestHandler):
 
         return param_type, raw_body
 
+    def validate_type(self, val, expected_type):
+        """入参强类型校验逻辑函数"""
+        if val is None:
+            return True, "Valid (Null)"
+        
+        if expected_type == "string":
+            is_valid = isinstance(val, str)
+        elif expected_type == "number":
+            # 排除 bool（在 Python 中 bool 是 int 的子类）
+            is_valid = isinstance(val, (int, float)) and not isinstance(val, bool)
+        elif expected_type == "boolean":
+            is_valid = isinstance(val, bool)
+        elif expected_type == "datetime":
+            # 校验 ISO 8601 时间格式字符串，如 2026-09-21T18:46:47Z
+            is_valid = isinstance(val, str) and bool(re.match(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}', val))
+        elif expected_type == "object":
+            is_valid = isinstance(val, dict)
+        elif expected_type == "array":
+            is_valid = isinstance(val, list)
+        else:
+            is_valid = True
+
+        actual_type = type(val).__name__ if not isinstance(val, bool) else "bool"
+        status_msg = "Valid" if is_valid else f"Type Mismatch Error: Expected {expected_type}, but got {actual_type}"
+        return is_valid, status_msg
+
     def process_request(self):
         param_type, raw_body = self.parse_request_data()
 
-        # 设置响应头与 CORS 跨域配置
+        # 设置响应头与 CORS
         self.send_response(200)
         self.send_header('Content-type', 'application/json')
         self.send_header('Access-Control-Allow-Origin', '*')
@@ -44,95 +69,97 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
 
         # ----------------------------------------------------
-        # 场景 A：整个根节点直接返回数组（C# 映射为 List<T>）
+        # 1. 场景 A：根节点入参/出参均为数组 (对应 C# List<T>)
         # ----------------------------------------------------
         if param_type == 'root_array':
-            response_data = [
+            echo_list = raw_body if isinstance(raw_body, list) else [
                 {"id": 1, "name": "Item Alpha", "isActive": True},
                 {"id": 2, "name": "Item Beta", "isActive": False}
             ]
-            self.wfile.write(json.dumps(response_data).encode('utf-8'))
+            self.wfile.write(json.dumps(echo_list).encode('utf-8'))
             return
 
         # ----------------------------------------------------
-        # 场景 B：强类型对象字段映射（针对 C# 强类型 Model 解析）
+        # 2. 场景 B：针对具体字段进行入参校验与强类型出参回传
         # ----------------------------------------------------
-        # 基础公共返回结构
+        input_dict = raw_body if isinstance(raw_body, dict) else {}
+        validation_results = {}
+
         response_data = {
             "code": 0,
-            "msg": "success"
+            "msg": "success",
+            "receivedInput": raw_body
         }
 
+        # 校验列表规则定义
+        type_checks = {
+            "stringIn": "string",
+            "numberIn": "number",
+            "booleanIn": "boolean",
+            "dateTimeIn": "datetime",
+            "objectIn": "object",
+            "stringArrayIn": "array",
+            "numberArrayIn": "array",
+            "booleanArrayIn": "array",
+            "dateTimeArrayIn": "array",
+            "objectArrayIn": "array"
+        }
+
+        # 执行入参类型校验
+        for field, exp_type in type_checks.items():
+            if field in input_dict:
+                is_valid, msg = self.validate_type(input_dict[field], exp_type)
+                validation_results[field] = msg
+
+        if validation_results:
+            response_data["inputValidation"] = validation_results
+
+        # 分支逻辑：将正确类型的出参填充给低代码平台绑定
         if param_type == 'string':
-            response_data["stringVal"] = "Hello LowCode"
+            response_data["stringVal"] = input_dict.get("stringIn", "Hello LowCode")
 
         elif param_type == 'number':
-            response_data["numberVal"] = 2026
+            response_data["numberVal"] = input_dict.get("numberIn", 2026)
 
         elif param_type == 'boolean':
-            response_data["booleanVal"] = True
+            response_data["booleanVal"] = input_dict.get("booleanIn", True)
 
         elif param_type == 'datetime':
-            # C# DateTime/DateTimeOffset 可直接反序列化 ISO 8601 字符串
-            response_data["dateTimeVal"] = "2026-09-21T18:46:47Z"
+            response_data["dateTimeVal"] = input_dict.get("dateTimeIn", "2026-09-21T18:46:47Z")
 
         elif param_type == 'object':
-            response_data["objectVal"] = {
-                "userId": 1001,
-                "userName": "Alice",
-                "role": "admin"
-            }
+            response_data["objectVal"] = input_dict.get("objectIn", {"userId": 1001, "userName": "Alice"})
 
-        # --- 各基础类型的数组 (C# List<string>, List<int> 等) ---
         elif param_type == 'array_string':
-            response_data["stringArray"] = ["apple", "banana", "cherry"]
+            response_data["stringArray"] = input_dict.get("stringArrayIn", ["apple", "banana"])
 
         elif param_type == 'array_number':
-            response_data["numberArray"] = [10, 20, 30, 100]
+            response_data["numberArray"] = input_dict.get("numberArrayIn", [10, 20, 30.5])
 
         elif param_type == 'array_boolean':
-            response_data["booleanArray"] = [True, False, True]
+            response_data["booleanArray"] = input_dict.get("booleanArrayIn", [True, False])
 
         elif param_type == 'array_datetime':
-            response_data["dateTimeArray"] = [
-                "2026-01-01T08:00:00Z",
-                "2026-09-21T18:46:47Z"
-            ]
+            response_data["dateTimeArray"] = input_dict.get("dateTimeArrayIn", ["2026-01-01T08:00:00Z"])
 
         elif param_type == 'array_object':
-            response_data["objectArray"] = [
-                {"itemId": 101, "itemName": "Item A", "inStock": True},
-                {"itemId": 102, "itemName": "Item B", "inStock": False}
-            ]
-
-        elif param_type == 'null':
-            response_data["nullVal"] = None
+            response_data["objectArray"] = input_dict.get("objectArrayIn", [{"itemId": 101, "itemName": "Item A"}])
 
         elif param_type == 'all_types':
-            # 一次性返回所有类型的字段，方便在低代码平台生成强类型 DTO/Model 结构
             response_data.update({
-                "stringVal": "Test String",
-                "numberVal": 123.45,
-                "booleanVal": True,
-                "dateTimeVal": "2026-09-21T18:46:47Z",
-                "objectVal": {"key": "value"},
-                "stringArray": ["A", "B"],
-                "numberArray": [1, 2, 3],
-                "booleanArray": [True, False],
-                "dateTimeArray": ["2026-01-01T00:00:00Z"],
-                "objectArray": [{"id": 1}]
+                "stringVal": input_dict.get("stringIn", "Test String"),
+                "numberVal": input_dict.get("numberIn", 123.45),
+                "booleanVal": input_dict.get("booleanIn", True),
+                "dateTimeVal": input_dict.get("dateTimeIn", "2026-09-21T18:46:47Z"),
+                "objectVal": input_dict.get("objectIn", {"key": "value"}),
+                "stringArray": input_dict.get("stringArrayIn", ["A", "B"]),
+                "numberArray": input_dict.get("numberArrayIn", [1, 2, 3]),
+                "booleanArray": input_dict.get("booleanArrayIn", [True, False]),
+                "dateTimeArray": input_dict.get("dateTimeArrayIn", ["2026-01-01T00:00:00Z"]),
+                "objectArray": input_dict.get("objectArrayIn", [{"id": 1}])
             })
-
         else:
-            response_data = {
-                "code": 0,
-                "msg": "Please specify a valid ?type= parameter.",
-                "supported_types": [
-                    "string", "number", "boolean", "datetime", "object",
-                    "array_string", "array_number", "array_boolean", "array_datetime", "array_object",
-                    "root_array", "all_types", "null"
-                ]
-            }
+            response_data["msg"] = "Ready for low-code platform parameter validation testing."
 
         self.wfile.write(json.dumps(response_data).encode('utf-8'))
         return
