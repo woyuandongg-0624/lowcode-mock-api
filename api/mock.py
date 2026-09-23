@@ -56,18 +56,20 @@ class handler(BaseHTTPRequestHandler):
         status_msg = "Valid" if is_valid else f"Expected type '{expected_type}', but got '{actual_type}'"
         return is_valid, status_msg
 
-    def process_request(self):
-        param_type, raw_body = self.parse_request_data()
-
-        self.send_response(200)
+    def send_cors_headers(self):
         self.send_header('Content-type', 'application/json')
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
-        self.end_headers()
+
+    def process_request(self):
+        param_type, raw_body = self.parse_request_data()
 
         # 1. 根节点直接是数组的特殊场景
         if param_type == 'root_array':
+            self.send_response(200)
+            self.send_cors_headers()
+            self.end_headers()
             echo_list = raw_body if isinstance(raw_body, list) else []
             self.wfile.write(json.dumps(echo_list, ensure_ascii=False).encode('utf-8'))
             return
@@ -88,33 +90,40 @@ class handler(BaseHTTPRequestHandler):
             "array_string": ("stringArrayIn", "array"),
             "array_boolean": ("booleanArrayIn", "array"),
             "array_datetime": ("dateTimeArrayIn", "array"),
-            "array_object": ("objectArrayIn", "array")
+            "array_object": ("objectArrayIn", "array"),
+            "all_types": (None, None)
         }
 
         # ----------------------------------------------------
-        # 3. 宽松排他，只针对匹配字段进行强类型校验
+        # 3. 校验逻辑（包含非法 type 校验）
         # ----------------------------------------------------
         if param_type in type_spec:
             req_field, exp_type = type_spec[param_type]
 
-            # 校验 A：检查 Body 中是否缺少当前 type 对应的入参字段
-            if req_field not in input_dict:
-                validation_errors[req_field] = f"Missing required parameter '{req_field}' for type '{param_type}'"
-            else:
-                # 校验 B：检查当前 type 对应的字段类型是否正确
-                is_valid, msg = self.check_field_type(input_dict[req_field], exp_type)
-                if not is_valid:
-                    validation_errors[req_field] = msg
-
-            # 已移除多余字段排他检测（允许同时传入 intIn, stringIn 等其他无关字段）
+            if req_field:
+                # 校验 A：检查 Body 中是否缺少当前 type 对应的入参字段
+                if req_field not in input_dict:
+                    validation_errors[req_field] = f"Missing required parameter '{req_field}' for type '{param_type}'"
+                else:
+                    # 校验 B：检查当前 type 对应的字段类型是否正确
+                    is_valid, msg = self.check_field_type(input_dict[req_field], exp_type)
+                    if not is_valid:
+                        validation_errors[req_field] = msg
+        elif param_type is not None:
+            # 校验 C：传入了不支持或拼错的 type（如 "objec"）
+            validation_errors["type"] = f"Unsupported or invalid type '{param_type}'. Supported types: {list(type_spec.keys())}"
 
         # ----------------------------------------------------
-        # 4. 校验失败：仅当当前 type 对应的字段缺失或类型错误时返回 400
+        # 4. 校验失败：返回 HTTP 400 响应
         # ----------------------------------------------------
         if validation_errors:
+            self.send_response(400)
+            self.send_cors_headers()
+            self.end_headers()
+            
             error_response = {
                 "code": 400,
-                "msg": f"Validation Error: Parameter '{type_spec.get(param_type, ('', ''))[0]}' for type '{param_type}' is invalid or missing.",
+                "msg": f"Validation Error: Invalid parameter or unsupported type '{param_type}'.",
                 "errors": validation_errors,
                 "receivedInput": raw_body
             }
@@ -122,8 +131,12 @@ class handler(BaseHTTPRequestHandler):
             return
 
         # ----------------------------------------------------
-        # 5. 校验通过：顺利返回对应的强类型出参
+        # 5. 校验通过：返回 HTTP 200 响应及对应的强类型出参
         # ----------------------------------------------------
+        self.send_response(200)
+        self.send_cors_headers()
+        self.end_headers()
+
         response_data = {
             "code": 0,
             "msg": "success",
@@ -181,8 +194,6 @@ class handler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):
         self.send_response(200)
-        self.send_header('Access-Control-Allow-Origin', '*')
-        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.send_cors_headers()
         self.end_headers()
         return
