@@ -65,11 +65,15 @@ class handler(BaseHTTPRequestHandler):
     def process_request(self):
         param_type, raw_body = self.parse_request_data()
 
+        # ----------------------------------------------------
+        # 统一设置 HTTP 状态码为 200 OK
+        # ----------------------------------------------------
+        self.send_response(200)
+        self.send_cors_headers()
+        self.end_headers()
+
         # 1. 根节点直接是数组的特殊场景
         if param_type == 'root_array':
-            self.send_response(200)
-            self.send_cors_headers()
-            self.end_headers()
             echo_list = raw_body if isinstance(raw_body, list) else []
             self.wfile.write(json.dumps(echo_list, ensure_ascii=False).encode('utf-8'))
             return
@@ -95,7 +99,7 @@ class handler(BaseHTTPRequestHandler):
         }
 
         # ----------------------------------------------------
-        # 3. 校验逻辑（包含非法 type 校验）
+        # 3. 校验逻辑
         # ----------------------------------------------------
         if param_type in type_spec:
             req_field, exp_type = type_spec[param_type]
@@ -114,15 +118,11 @@ class handler(BaseHTTPRequestHandler):
             validation_errors["type"] = f"Unsupported or invalid type '{param_type}'. Supported types: {list(type_spec.keys())}"
 
         # ----------------------------------------------------
-        # 4. 校验失败：返回 HTTP 400 响应
+        # 4. 校验失败：HTTP 依然是 200，但 JSON 中的 code 改为 400
         # ----------------------------------------------------
         if validation_errors:
-            self.send_response(400)
-            self.send_cors_headers()
-            self.end_headers()
-            
             error_response = {
-                "code": 400,
+                "code": 400, # <--- 业务错误码
                 "msg": f"Validation Error: Invalid parameter or unsupported type '{param_type}'.",
                 "errors": validation_errors,
                 "receivedInput": raw_body
@@ -131,12 +131,8 @@ class handler(BaseHTTPRequestHandler):
             return
 
         # ----------------------------------------------------
-        # 5. 校验通过：返回 HTTP 200 响应及对应的强类型出参
+        # 5. 校验通过：返回 code: 0 及对应的强类型出参
         # ----------------------------------------------------
-        self.send_response(200)
-        self.send_cors_headers()
-        self.end_headers()
-
         response_data = {
             "code": 0,
             "msg": "success",
