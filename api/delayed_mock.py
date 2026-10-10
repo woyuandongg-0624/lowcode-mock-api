@@ -39,9 +39,9 @@ class handler(BaseHTTPRequestHandler):
         param_type, raw_body = self.parse_request_data()
 
         # ----------------------------------------------------
-        # 核心：固定等待 101 秒，确保响应时间超过 100 秒
+        # 核心：固定等待 125 秒，确保响应时间超过 100 秒
         # ----------------------------------------------------
-        time.sleep(101)
+        time.sleep(125)
 
         # ----------------------------------------------------
         # 设置 HTTP 状态码为 200 OK 并返回标准 JSON
@@ -52,9 +52,9 @@ class handler(BaseHTTPRequestHandler):
 
         response_data = {
             "code": 0,
-            "msg": "success after 101 seconds delay",
+            "msg": "success after 125 seconds delay",
             "receivedInput": raw_body,
-            "delaySeconds": 101
+            "delaySeconds": 125
         }
 
         self.wfile.write(json.dumps(response_data, ensure_ascii=False).encode('utf-8'))
