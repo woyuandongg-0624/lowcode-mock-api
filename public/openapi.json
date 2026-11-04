@@ -126,6 +126,38 @@
         }
       }
     },
+    "/api/circuit/status-alt/{code}": {
+      "get": {
+        "tags": ["断路器测试"],
+        "summary": "Independent status-code endpoint",
+        "description": "Same behavior as /api/circuit/status/{code}, but with a distinct URL for circuit-breaker isolation tests.",
+        "operationId": "circuitStatusAlt",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "description": "HTTP status code from 200 to 599. 204, 205, and 304 have no response body.",
+            "schema": { "type": "integer", "minimum": 200, "maximum": 599 },
+            "example": 200
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Returned when code is 200",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CircuitResponse" }, "example": { "code": 200, "message": "Mock response with HTTP status 200" } } }
+          },
+          "400": {
+            "description": "Invalid or out-of-range code",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CircuitResponse" }, "example": { "code": 400, "message": "Path code must be an integer from 200 to 599." } } }
+          },
+          "default": {
+            "description": "Returns the HTTP status specified by code; 204, 205, and 304 have no body.",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CircuitResponse" }, "example": { "code": 429, "message": "Mock response with HTTP status 429" } } }
+          }
+        }
+      }
+    },
     "/api/delayed_mock": {
       "get": {
         "tags": ["延迟测试"],

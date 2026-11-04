@@ -3,6 +3,10 @@
     {
       "source": "/api/circuit/status/:code",
       "destination": "/api/circuit/status?code=:code"
+    },
+    {
+      "source": "/api/circuit/status-alt/:code",
+      "destination": "/api/circuit/status_alt?code=:code"
     }
   ]
 }
