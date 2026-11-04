@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/circuit/status/:code",
+      "destination": "/api/circuit/status?code=:code"
+    }
+  ]
+}

@@ -1,0 +1,325 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "LowCode Mock API",
+    "version": "1.0.0",
+    "description": "低代码平台接口测试用 Mock API。业务校验失败仍返回 HTTP 200，需检查响应体 code（0 成功，400 业务校验失败）。"
+  },
+  "servers": [
+    {
+      "url": "https://lowcode-mock-api.vercel.app",
+      "description": "Vercel 部署地址"
+    }
+  ],
+  "tags": [
+    { "name": "延迟测试" },
+    { "name": "类型回显" },
+    { "name": "数组响应" },
+    { "name": "断路器测试" },
+    { "name": "连接异常测试" }
+  ],
+  "paths": {
+    "/api/circuit/timeout": {
+      "get": {
+        "tags": ["连接异常测试"],
+        "summary": "延迟响应以测试调用方超时",
+        "description": "默认延迟 5 秒后返回 HTTP 200。应将调用方超时时间设得更短（例如 2 秒）。实际可等待时长也受部署平台函数时限约束。",
+        "operationId": "circuitTimeout",
+        "parameters": [
+          {
+            "name": "seconds",
+            "in": "query",
+            "required": false,
+            "description": "延迟秒数，1–30；默认 5。",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 30, "default": 5 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "延迟结束后返回",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CircuitResponse" }, "example": { "code": 200, "message": "Response delayed by 5 seconds.", "delaySeconds": 5 } } }
+          },
+          "400": {
+            "description": "seconds 参数无效",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CircuitResponse" }, "example": { "code": 400, "message": "seconds must be an integer from 1 to 30." } } }
+          }
+        }
+      }
+    },
+    "/api/circuit/connection-reset": {
+      "get": {
+        "tags": ["连接异常测试"],
+        "summary": "尝试重置 TCP 连接",
+        "description": "不返回 HTTP 响应，尝试通过 TCP RST 中断连接。本地测试通常最直接；部署在 Vercel 等代理之后时，代理可能将其转换为网关错误，调用方不一定观察到原始连接重置。",
+        "operationId": "circuitConnectionReset",
+        "responses": {
+          "default": {
+            "description": "连接被重置或由中间代理转换为网关错误；正常情况下不会收到该接口的 JSON 响应。"
+          }
+        }
+      }
+    },
+    "/api/circuit/success": {
+      "get": {
+        "tags": ["断路器测试"],
+        "summary": "始终返回成功",
+        "operationId": "circuitSuccess",
+        "responses": {
+          "200": {
+            "description": "成功响应",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/CircuitResponse" },
+                "example": { "code": 200, "message": "success", "data": { "id": 1001, "name": "Mock User" } }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/circuit/failure": {
+      "get": {
+        "tags": ["断路器测试"],
+        "summary": "始终返回 HTTP 500",
+        "operationId": "circuitFailure",
+        "responses": {
+          "500": {
+            "description": "模拟服务端故障",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/CircuitResponse" },
+                "example": { "code": 500, "message": "Mock service failure" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/circuit/status/{code}": {
+      "get": {
+        "tags": ["断路器测试"],
+        "summary": "返回指定 HTTP 状态码",
+        "operationId": "circuitStatus",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "description": "目标 HTTP 状态码，范围 200–599。204、205、304 按 HTTP 规范不返回响应体。",
+            "schema": { "type": "integer", "minimum": 200, "maximum": 599 },
+            "example": 429
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "当 code=200 时返回",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CircuitResponse" }, "example": { "code": 200, "message": "Mock response with HTTP status 200" } } }
+          },
+          "400": {
+            "description": "code 不是整数或超出允许范围",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CircuitResponse" }, "example": { "code": 400, "message": "Path code must be an integer from 200 to 599." } } }
+          },
+          "default": {
+            "description": "返回与路径参数 code 相同的 HTTP 状态码；204、205、304 不含响应体。",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CircuitResponse" }, "example": { "code": 429, "message": "Mock response with HTTP status 429" } } }
+          }
+        }
+      }
+    },
+    "/api/delayed_mock": {
+      "get": {
+        "tags": ["延迟测试"],
+        "summary": "固定延迟 125 秒后返回",
+        "description": "固定等待 125 秒，不支持 delay 参数。",
+        "operationId": "delayedMockGet",
+        "responses": {
+          "200": {
+            "description": "延迟完成",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DelayedResponse" }, "example": { "code": 0, "msg": "success after 125 seconds delay", "receivedInput": null, "delaySeconds": 125 } } }
+          }
+        }
+      },
+      "post": {
+        "tags": ["延迟测试"],
+        "summary": "固定延迟 125 秒后返回并回显请求体",
+        "operationId": "delayedMockPost",
+        "requestBody": {
+          "required": false,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AnyJson" }, "example": { "message": "hello" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "延迟完成",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/DelayedResponse" }, "example": { "code": 0, "msg": "success after 125 seconds delay", "receivedInput": { "message": "hello" }, "delaySeconds": 125 } } }
+          }
+        }
+      }
+    },
+    "/api/mock": {
+      "get": {
+        "tags": ["类型回显"],
+        "summary": "按类型校验并回显数据",
+        "operationId": "mockGet",
+        "parameters": [{ "$ref": "#/components/parameters/MockType" }],
+        "responses": { "200": { "$ref": "#/components/responses/MockResult" } }
+      },
+      "post": {
+        "tags": ["类型回显"],
+        "summary": "按类型校验并回显数据",
+        "description": "JSON 对象中的 type 优先于 query type。根节点数组会原样返回。",
+        "operationId": "mockPost",
+        "parameters": [{ "$ref": "#/components/parameters/MockType" }],
+        "requestBody": { "$ref": "#/components/requestBodies/MockPayload" },
+        "responses": { "200": { "$ref": "#/components/responses/MockResult" } }
+      }
+    },
+    "/api/array_mock": {
+      "get": {
+        "tags": ["数组响应"],
+        "summary": "返回指定元素类型的 JSON 数组",
+        "operationId": "arrayMockGet",
+        "parameters": [{ "$ref": "#/components/parameters/ArrayType" }],
+        "responses": { "200": { "$ref": "#/components/responses/ArrayResult" } }
+      },
+      "post": {
+        "tags": ["数组响应"],
+        "summary": "回显数组或返回指定类型的 JSON 数组",
+        "description": "根节点数组请求体会原样返回；对象中的 type 在未提供 query type 时生效。",
+        "operationId": "arrayMockPost",
+        "parameters": [{ "$ref": "#/components/parameters/ArrayType" }],
+        "requestBody": { "$ref": "#/components/requestBodies/AnyJsonBody" },
+        "responses": { "200": { "$ref": "#/components/responses/ArrayResult" } }
+      }
+    },
+    "/api/string_array_mock": {
+      "get": {
+        "tags": ["数组响应"],
+        "summary": "返回默认字符串数组",
+        "operationId": "stringArrayMockGet",
+        "responses": { "200": { "$ref": "#/components/responses/StringArrayResult" } }
+      },
+      "post": {
+        "tags": ["数组响应"],
+        "summary": "校验并回显字符串数组",
+        "description": "纯字符串数组原样返回；若根节点不是数组，则返回默认字符串数组。数组含非字符串元素时响应体 code=400，但 HTTP 状态仍为 200。",
+        "operationId": "stringArrayMockPost",
+        "requestBody": { "$ref": "#/components/requestBodies/StringArrayBody" },
+        "responses": { "200": { "$ref": "#/components/responses/StringArrayResult" } }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "MockType": {
+        "name": "type",
+        "in": "query",
+        "required": false,
+        "description": "支持 int、double、string、boolean、datetime、object、array_int、array_double、array_string、array_boolean、array_datetime、array_object、all_types。",
+        "schema": { "type": "string", "enum": ["int", "double", "string", "boolean", "datetime", "object", "array_int", "array_double", "array_string", "array_boolean", "array_datetime", "array_object", "all_types"] }
+      },
+      "ArrayType": {
+        "name": "type",
+        "in": "query",
+        "required": false,
+        "description": "指定返回数组元素类型；支持 int、double、string、boolean、datetime、object。",
+        "schema": { "type": "string", "enum": ["int", "double", "string", "boolean", "datetime", "object"] }
+      }
+    },
+    "requestBodies": {
+      "MockPayload": {
+        "required": false,
+        "content": {
+          "application/json": {
+        "schema": { "$ref": "#/components/schemas/MockRequest" },
+            "examples": {
+              "integer": { "summary": "整数", "value": { "type": "int", "intIn": 2026 } },
+              "decimal": { "summary": "浮点数", "value": { "type": "double", "doubleIn": 99.99 } },
+              "text": { "summary": "字符串", "value": { "type": "string", "stringIn": "hello" } },
+              "boolean": { "summary": "布尔值", "value": { "type": "boolean", "booleanIn": true } },
+              "dateTime": { "summary": "日期时间", "value": { "type": "datetime", "dateTimeIn": "2026-09-21T18:46:47Z" } },
+              "object": { "summary": "对象", "value": { "type": "object", "objectIn": { "key": "value" } } },
+              "integerArray": { "summary": "整数数组", "value": { "type": "array_int", "intArrayIn": [1, 2, 3] } },
+              "decimalArray": { "summary": "浮点数数组", "value": { "type": "array_double", "doubleArrayIn": [10.5, 20.8] } },
+              "stringArray": { "summary": "字符串数组", "value": { "type": "array_string", "stringArrayIn": ["A", "B"] } },
+              "booleanArray": { "summary": "布尔数组", "value": { "type": "array_boolean", "booleanArrayIn": [true, false] } },
+              "dateTimeArray": { "summary": "日期时间数组", "value": { "type": "array_datetime", "dateTimeArrayIn": ["2026-01-01T00:00:00Z"] } },
+              "objectArray": { "summary": "对象数组", "value": { "type": "array_object", "objectArrayIn": [{ "id": 1 }] } },
+              "allTypes": { "summary": "全部类型", "value": { "type": "all_types" } }
+            }
+          }
+        }
+      },
+      "AnyJsonBody": {
+        "required": false,
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AnyJson" }, "examples": { "array": { "summary": "根节点数组", "value": [1, 2, 3] }, "object": { "summary": "对象", "value": { "type": "string" } } } } }
+      },
+      "StringArrayBody": {
+        "required": false,
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AnyJson" }, "examples": { "valid": { "summary": "Valid string array", "value": ["Apple", "Banana"] }, "invalid": { "summary": "Array with a non-string item", "value": ["Apple", 1] } } } }
+      }
+    },
+    "responses": {
+      "MockResult": {
+        "description": "HTTP 状态为 200；校验错误通过响应体 code=400 表示。",
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AnyJson" }, "examples": { "success": { "summary": "成功", "value": { "code": 0, "msg": "success", "receivedInput": { "type": "int", "intIn": 2026 }, "intVal": 2026 } }, "validationError": { "summary": "校验失败", "value": { "code": 400, "msg": "Validation Error", "errors": { "intIn": "Missing required parameter" }, "receivedInput": { "type": "int" } } }, "rootArray": { "summary": "根节点数组透传", "value": [1, 2, 3] } } } }
+      },
+      "ArrayResult": {
+        "description": "成功响应是根节点 JSON 数组。",
+        "content": { "application/json": { "schema": { "oneOf": [{ "type": "array", "items": { "type": "integer" } }, { "type": "array", "items": { "type": "number" } }, { "type": "array", "items": { "type": "string" } }, { "type": "array", "items": { "type": "boolean" } }, { "type": "array", "items": { "type": "object", "additionalProperties": true } }] }, "examples": { "integers": { "value": [101, 202, 303] }, "strings": { "value": ["Apple", "Banana", "Orange"] }, "objects": { "value": [{ "id": 1, "name": "Item Alpha", "status": "active" }] } } } }
+      },
+      "StringArrayResult": {
+        "description": "成功时为字符串数组；输入元素类型错误时仍返回 HTTP 200，响应体为错误对象。",
+        "content": { "application/json": { "schema": { "oneOf": [{ "type": "array", "items": { "type": "string" } }, { "$ref": "#/components/schemas/ValidationError" }] }, "examples": { "success": { "summary": "成功", "value": ["Apple", "Banana", "Orange"] }, "validationError": { "summary": "元素类型错误", "value": { "code": 400, "msg": "Validation Error: Every item in the array must be a string.", "invalidElements": [1], "receivedInput": ["Apple", 1] } } } } }
+      }
+    },
+    "schemas": {
+      "CircuitResponse": {
+        "type": "object",
+        "properties": {
+          "code": { "type": "integer", "description": "与 HTTP 状态码一致" },
+          "message": { "type": "string" },
+          "data": { "type": "object", "additionalProperties": true }
+        }
+      },
+      "AnyJson": {
+        "description": "任意 JSON 值，包括对象、数组、字符串、数字、布尔值或 null。"
+      },
+      "DelayedResponse": {
+        "type": "object",
+        "required": ["code", "msg", "receivedInput", "delaySeconds"],
+        "properties": { "code": { "type": "integer", "example": 0 }, "msg": { "type": "string", "example": "success after 125 seconds delay" }, "receivedInput": { "$ref": "#/components/schemas/AnyJson" }, "delaySeconds": { "type": "integer", "example": 125 } }
+      },
+      "ValidationError": {
+        "type": "object",
+        "properties": { "code": { "type": "integer", "example": 400 }, "msg": { "type": "string" }, "errors": { "type": "object", "additionalProperties": { "type": "string" } }, "invalidElements": { "type": "array", "items": {} }, "receivedInput": { "$ref": "#/components/schemas/AnyJson" } }
+      },
+      "MockPayload": {
+        "type": "object",
+        "description": "传入 type 及其对应字段；各字段类型随 type 变化。根节点也可以直接传 JSON 数组。",
+        "additionalProperties": true,
+        "properties": {
+          "type": { "type": "string", "enum": ["int", "double", "string", "boolean", "datetime", "object", "array_int", "array_double", "array_string", "array_boolean", "array_datetime", "array_object", "all_types"] },
+          "intIn": { "type": "integer", "example": 2026 },
+          "doubleIn": { "type": "number", "example": 99.99 },
+          "stringIn": { "type": "string", "example": "hello" },
+          "booleanIn": { "type": "boolean", "example": true },
+          "dateTimeIn": { "type": "string", "format": "date-time", "example": "2026-09-21T18:46:47Z" },
+          "objectIn": { "type": "object", "additionalProperties": true },
+          "intArrayIn": { "type": "array", "items": { "type": "integer" } },
+          "doubleArrayIn": { "type": "array", "items": { "type": "number" } },
+          "stringArrayIn": { "type": "array", "items": { "type": "string" } },
+          "booleanArrayIn": { "type": "array", "items": { "type": "boolean" } },
+          "dateTimeArrayIn": { "type": "array", "items": { "type": "string", "format": "date-time" } },
+          "objectArrayIn": { "type": "array", "items": { "type": "object", "additionalProperties": true } }
+        }
+      },
+      "MockRequest": {
+        "description": "按 type 传入的对象，或直接透传的根节点 JSON 数组。",
+        "oneOf": [
+          { "$ref": "#/components/schemas/MockPayload" },
+          { "type": "array", "items": {} }
+        ]
+      }
+    }
+  }
+}
