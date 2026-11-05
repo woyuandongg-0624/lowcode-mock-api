@@ -32,7 +32,18 @@ class handler(BaseHTTPRequestHandler):
             else:
                 body = json.dumps({
                     'errCode': status_code,
-                    'errMessage': f'Mock errResponse with HTTP status {status_code}'
+                    'errMessage': f'Mock errResponse with HTTP status {status_code}',
+                    "data": {
+                        "id": "mock-001",
+                        "name": "测试数据",
+                        "status": True,
+                        "count": 100,
+                        "details": {
+                            "type": "mock",
+                            "description": "This is a mock object"
+                        },
+                        "items": ["A", "B", "C"]
+                    }
                 })
             self.wfile.write(body.encode('utf-8'))
 
