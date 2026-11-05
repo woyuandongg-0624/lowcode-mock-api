@@ -24,10 +24,16 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
 
         if status_code not in (204, 205, 304):
-            body = json.dumps({
-                'code': status_code,
-                'message': f'Mock response with HTTP status {status_code}'
-            })
+            if status_code == 200:
+                body = json.dumps({
+                    'code': status_code,
+                    'message': f'Mock response with HTTP status {status_code}'
+                })
+            else:
+                body = json.dumps({
+                    'errCode': status_code,
+                    'errMessage': f'Mock errResponse with HTTP status {status_code}'
+                })
             self.wfile.write(body.encode('utf-8'))
 
     def send_error_response(self, status_code, message):
