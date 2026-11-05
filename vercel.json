@@ -1,12 +1,84 @@
 {
   "rewrites": [
     {
+      "source": "/api/mock",
+      "destination": "/api/typed_payload_echo"
+    },
+    {
+      "source": "/api/typed-payload-echo",
+      "destination": "/api/typed_payload_echo"
+    },
+    {
+      "source": "/api/array_mock",
+      "destination": "/api/typed_array_response"
+    },
+    {
+      "source": "/api/typed-array-response",
+      "destination": "/api/typed_array_response"
+    },
+    {
+      "source": "/api/string_array_mock",
+      "destination": "/api/string_array_echo"
+    },
+    {
+      "source": "/api/string-array-echo",
+      "destination": "/api/string_array_echo"
+    },
+    {
+      "source": "/api/delayed_mock",
+      "destination": "/api/fixed_delay_echo"
+    },
+    {
+      "source": "/api/fixed-delay-echo",
+      "destination": "/api/fixed_delay_echo"
+    },
+    {
+      "source": "/api/circuit/success",
+      "destination": "/api/circuit/always_success"
+    },
+    {
+      "source": "/api/circuit/always-success",
+      "destination": "/api/circuit/always_success"
+    },
+    {
+      "source": "/api/circuit/failure",
+      "destination": "/api/circuit/server_error"
+    },
+    {
+      "source": "/api/circuit/server-error",
+      "destination": "/api/circuit/server_error"
+    },
+    {
+      "source": "/api/circuit/timeout",
+      "destination": "/api/circuit/configurable_delay"
+    },
+    {
+      "source": "/api/circuit/configurable-delay",
+      "destination": "/api/circuit/configurable_delay"
+    },
+    {
+      "source": "/api/circuit/connection-reset",
+      "destination": "/api/circuit/tcp_connection_reset"
+    },
+    {
+      "source": "/api/circuit/tcp-connection-reset",
+      "destination": "/api/circuit/tcp_connection_reset"
+    },
+    {
       "source": "/api/circuit/status/:code",
-      "destination": "/api/circuit/status?code=:code"
+      "destination": "/api/circuit/http_status_response?code=:code"
     },
     {
       "source": "/api/circuit/status-alt/:code",
-      "destination": "/api/circuit/status_alt?code=:code"
+      "destination": "/api/circuit/http_status_isolation?code=:code"
+    },
+    {
+      "source": "/api/circuit/http-status-response/:code",
+      "destination": "/api/circuit/http_status_response?code=:code"
+    },
+    {
+      "source": "/api/circuit/http-status-isolation/:code",
+      "destination": "/api/circuit/http_status_isolation?code=:code"
     }
   ]
 }

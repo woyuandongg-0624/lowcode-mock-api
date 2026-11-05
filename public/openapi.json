@@ -238,6 +238,36 @@
         "requestBody": { "$ref": "#/components/requestBodies/StringArrayBody" },
         "responses": { "200": { "$ref": "#/components/responses/StringArrayResult" } }
       }
+    },
+    "/api/typed-payload-echo": {
+      "$ref": "#/paths/~1api~1mock"
+    },
+    "/api/typed-array-response": {
+      "$ref": "#/paths/~1api~1array_mock"
+    },
+    "/api/string-array-echo": {
+      "$ref": "#/paths/~1api~1string_array_mock"
+    },
+    "/api/fixed-delay-echo": {
+      "$ref": "#/paths/~1api~1delayed_mock"
+    },
+    "/api/circuit/always-success": {
+      "$ref": "#/paths/~1api~1circuit~1success"
+    },
+    "/api/circuit/server-error": {
+      "$ref": "#/paths/~1api~1circuit~1failure"
+    },
+    "/api/circuit/configurable-delay": {
+      "$ref": "#/paths/~1api~1circuit~1timeout"
+    },
+    "/api/circuit/tcp-connection-reset": {
+      "$ref": "#/paths/~1api~1circuit~1connection-reset"
+    },
+    "/api/circuit/http-status-response/{code}": {
+      "$ref": "#/paths/~1api~1circuit~1status~1{code}"
+    },
+    "/api/circuit/http-status-isolation/{code}": {
+      "$ref": "#/paths/~1api~1circuit~1status-alt~1{code}"
     }
   },
   "components": {
