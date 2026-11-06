@@ -23,31 +23,30 @@ class handler(BaseHTTPRequestHandler):
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
 
-        if status_code not in (204, 205, 304):
-            if 200 <= status_code < 300:
-                body = json.dumps({
-                    'code': status_code,
-                    'message': f'Mock response with HTTP status {status_code}'
-                })
-            elif 300 <= status_code < 400:
-                body = None
-            else:
-                body = json.dumps({
-                    'errCode': status_code,
-                    'errMessage': f'Mock errResponse with HTTP status {status_code}',
-                    "data": {
-                        "id": "mock-001",
-                        "name": "测试数据",
-                        "status": True,
-                        "count": 100,
-                        "details": {
-                            "type": "mock",
-                            "description": "This is a mock object"
-                        },
-                        "items": ["A", "B", "C"]
-                    }
-                })
-            self.wfile.write(body.encode('utf-8'))
+        if 200 <= status_code < 300:
+            body = json.dumps({
+                'code': status_code,
+                'message': f'Mock response with HTTP status {status_code}'
+            })
+        elif 300 <= status_code < 400:
+            body = None
+        else:
+            body = json.dumps({
+                'errCode': status_code,
+                'errMessage': f'Mock errResponse with HTTP status {status_code}',
+                "data": {
+                    "id": "mock-001",
+                    "name": "测试数据",
+                    "status": True,
+                    "count": 100,
+                    "details": {
+                        "type": "mock",
+                        "description": "This is a mock object"
+                    },
+                    "items": ["A", "B", "C"]
+                }
+            })
+        self.wfile.write(body.encode('utf-8'))
 
     def send_error_response(self, status_code, message):
         self.send_response(status_code)
