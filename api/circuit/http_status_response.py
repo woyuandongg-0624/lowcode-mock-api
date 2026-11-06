@@ -24,11 +24,13 @@ class handler(BaseHTTPRequestHandler):
         self.end_headers()
 
         if status_code not in (204, 205, 304):
-            if status_code == 200:
+            if 200 <= status_code < 300:
                 body = json.dumps({
                     'code': status_code,
                     'message': f'Mock response with HTTP status {status_code}'
                 })
+            elif 300 <= status_code < 400:
+                body = None
             else:
                 body = json.dumps({
                     'errCode': status_code,
